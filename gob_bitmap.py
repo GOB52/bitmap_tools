@@ -18,8 +18,9 @@ class BITMAPFILEHEADER(LittleEndianStructure):
         ('bfOffBits', c_uint32),
     ]
 
-    def __init__(self, width = 0, height = 0, depth = 4, clrs = 16):
-        hsize = 14 + 40 + (4 * clrs)  # BITMAPFILEHADER + BITMAPINFOHEADER + palettes
+    def __init__(self, width = 0, height = 0, depth = 4):
+        clrs = 2 ** depth if depth <= 8 else 0
+        hsize = 14 + 40 + (4 * clrs)  # BITMAPFILEHADER + BITMAPINFOHEADER + RGBQUAD * clrs
         dwidth = width + ((width % 4) + 3) // 4
         self.biType = 0x4d42
         self.bfSize = hsize + (dwidth * height) // 2 # 4
@@ -49,7 +50,8 @@ class BITMAPINFOHEADER(LittleEndianStructure):
         ("biClrImportant", c_uint32),
      ]
 
-    def __init__(self, width = 0, height = 0, depth = 4, clrs = 16):
+    def __init__(self, width = 0, height = 0, depth = 4):
+        clrs = 2 ** depth if depth <= 8 else 0
         self.biSize = 40  # 4
         self.biWidth = width  # 4
         self.biHeight = height  # 4
@@ -137,12 +139,12 @@ class RGBQUAD(LittleEndianStructure):
 
 # BMP3 format
 class Bitmap():
-    def __init__(self, width = 1, height = 1, depth = 4, clrs = 16):
-        self.file_header = BITMAPFILEHEADER(width, height, depth, clrs)
-        self.info_header = BITMAPINFOHEADER(width, height, depth, clrs)
-        self.palettes = [None] * clrs;
+    def __init__(self, width = 1, height = 1, depth = 4):
+        clrs = 2 ** depth if depth <= 8 else 1
+        self.file_header = BITMAPFILEHEADER(width, height, depth)
+        self.info_header = BITMAPINFOHEADER(width, height, depth)
+        self.palettes = [RGBQUAD] * clrs;
         self.data = array.array('B', [0] * self.info_header.biSizeImage)
-        
 
     def __repr__(self):
         return str(self.file_header) + '\n' + str(self.info_header) + '\n' + str([ x for x in self.palettes ])
