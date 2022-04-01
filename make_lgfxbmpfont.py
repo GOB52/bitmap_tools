@@ -48,12 +48,13 @@ def print_glyph(name, glist, width, height, code = 0x20):
 
         
 def main():
-    parser = argparse.ArgumentParser(description='Image to C source style for LovyanGFX GFXfont format.')
+    parser = argparse.ArgumentParser(description='Output C style source to stdout in GFXfont, FixedBMPfont, and GLCDfont format from image')
     parser.add_argument('src_path', help='image path')
-    parser.add_argument('--width', '-w', type=int, required=True, help='font width')
-    parser.add_argument('--height', '-h', type=int, required=True, help='font height')
+    parser.add_argument('--width',  type=int, required=True, help='font width')
+    parser.add_argument('--height', type=int, required=True, help='font height')
     parser.add_argument('--name', type=str, help='font name')
-    parser.add_argument('--code', type=int, default=32, help='Start of character code') # 0x20(white space) as default
+    parser.add_argument('--code', type=int, default=32, help='Start of character code (32 as default)') # 0x20(white space) as default
+    parser.add_argument('--format', type=str, default='GFX', choices=['GFX','BMP', 'GLCD'], help='output format (GFX as default)')
     parser.add_argument('--verbose', '-v', action='store_true')
 
     args = parser.parse_args()
@@ -61,14 +62,21 @@ def main():
     img = Image.open(args.src_path).convert(mode='1')
     width, height = img.size
     if args.verbose:
-        print('bitmap size {}:{} / font {}:{}'.format(width, height, args.width, args.height))
+        print('image size {}:{} / font {}:{}'.format(width, height, args.width, args.height))
 
     glist = []
-        
+
+    if height//args.height == 0 or width//args.width == 0:
+        print('A width or height greater than the size of the image was specified. image:({}:{})'
+              .format(width, height))
+        return -1
+    
     for y in range(height//args.height):
         for x in range(width//args.width):
             rect = (x * args.width, y * args.height, (x + 1) * args.width, (y + 1) * args.height)
             g = img.crop(rect)
+            if args.format == 'GLCD':
+                g = g.rotate(270)
             ng = np.array(g.getdata())
             ng.shape = args.height, args.width
             glist.append(ng)
@@ -80,11 +88,24 @@ def main():
         name = os.path.splitext(os.path.basename(args.src_path))[0]
         
     print_image(name, glist, args.height, args.code)
-    print_glyph(name, glist, args.width, args.height, args.code)
 
-    print('const GFXfont {}_font PROGMEM = {{\n (uint8_t*){}_bitmaps, (GFXglyph*){}_glyphs, 0x{:x}, 0x{:x}, {} }};'
-           .format(name, name, name, args.code, args.code + len(glist) - 1, args.height))
-    
+    if args.format == 'GFX':
+        print_glyph(name, glist, args.width, args.height, args.code)
+        print('const GFXfont {}_font PROGMEM = {{ (uint8_t*){}_bitmaps, (GFXglyph*){}_glyphs, 0x{:x}, 0x{:x}, {} }};'
+              .format(name, name, name, args.code, args.code + len(glist) - 1, args.height))
+
+    elif args.format in {'BMP', 'GLCD'}:
+        print('const std::uint8_t {}_font_info[] PROGMEM = {{ 0x{:x}, 0x{:x}, {} }};\n'
+              .format(name, args.code, args.code + len(glist) - 1, args.width))
+
+        if args.format == 'BMP':
+            print('const FixedBMPfont {}_font PROGMEM = {{ {}_bitmaps, {}_font_info, {}, {}, {} }};\n'
+                  .format(name, name, name, args.width, args.height, args.height - 1))
+
+        elif args.format == 'GLCD':
+            print('const GLCDfont {}_font PROGMEM = {{ {}_bitmaps, {}_font_info, {}, {}, {} }};\n'
+                  .format(name, name, name, args.width, args.height, args.height - 1))
+
     return 0
 
 if __name__ == '__main__':
